@@ -1,68 +1,84 @@
-# Migration Plan: os-autoinst to Rust and Python
+# Revised Migration Plan: os-autoinst to Rust and Python
 
-**Goal:** Migrate `os-autoinst` completely to Rust and Python, moving away from Perl and C/C++ dependencies. The only exception is maintaining a shallow Perl test-API to ensure existing test suites continue to function without modification. 
+**Goal:** Completely migrate `os-autoinst` to Rust and Python, removing all C/C++ and CMake dependencies while preserving a shallow Perl test-API for existing suites. This plan incorporates learnings from initial prototyping to ensure a robust, maintainable, and verifiable transition.
 
-**Core Principles:**
-- **Step-wise Migration:** Conducted in phases, keeping full functionality intact during every phase.
-- **Backward Compatibility:** Keep backward-compatible wrappers to allow continuous operations while the migration is ongoing.
-- **Quality:** Focus on fast, fully test-covered, human-readable, and sustainable code.
+---
 
-## Phase 1: Core Image Processing and VNC to Rust (The Foundation)
-**Objective:** Replace the existing C++ and CMake controlled OpenCV/VNC component with a new, highly performant Rust core.
+## Phase 1: Foundation & Low-Risk Utilities (Trust Building)
+*Objective: Establish the new stack and replace non-critical C++ tools first.*
 
-1. **Rust Core Implementation:**
-   - Create a new Rust library (`os-autoinst-core`) to handle image processing (needle matching, OCR) and VNC communication.
-   - Replicate the functionality of the existing C++ components with a focus on memory safety and concurrency.
-   - Implement comprehensive unit tests in Rust for all image processing algorithms.
-2. **Python Bridge (PyO3):**
-   - Use `PyO3` to create a Python bridge to the `os-autoinst-core` Rust library.
-   - Expose the necessary Rust structures and functions as a Python module (`os_autoinst_core`).
-3. **Backward-Compatible Wrappers:**
-   - Temporarily wrap the new Python module (or directly expose a C-API from Rust) to allow the existing Perl infrastructure to call into the new Rust core. This ensures the system remains fully functional while C++ code is deprecated.
-4. **Validation:** Ensure all existing CTest and Perl test suites pass using the new Rust core.
+1.  **Build System Foundation**:
+    - Integrate `cargo` into the top-level `Makefile`.
+    - Setup `rust/os-autoinst-core` with `PyO3` support.
+2.  **Debugviewer (Python)**:
+    - Replace the legacy C++ `debugviewer` with a Python implementation using `Tkinter` and `Pillow`.
+    - *Verification*: Manual check of image auto-refresh functionality.
+3.  **Snd2png (Rust)**:
+    - Rewrite the audio spectrogram generator in Rust using `rustfft` and `hound`.
+    - *Verification*: Compare output PNGs with legacy `snd2png` outputs.
+4.  **Videoencoder (Rust)**:
+    - Rewrite the video encoding binary in Rust, managing an `ffmpeg` pipe for Ogg Theora.
+    - *Verification*: Verify `.ogv` recording in standard test runs.
 
-## Phase 2: Python Migration of Main Executables (`isotovideo`)
-**Objective:** Migrate the main execution flow (`isotovideo`) and core infrastructure from Perl to Python.
+---
 
-1. **Python `isotovideo` Rewrite:**
-   - Port the core logic of `isotovideo` from Perl to Python.
-   - Integrate the Python `isotovideo` with the `os_autoinst_core` Python module (from Phase 1).
-2. **Shallow Perl Test-API:**
-   - Refactor the existing Perl `testapi.pm` (and related modules) to act purely as a shallow interface.
-   - These Perl modules will translate test API calls (e.g., `assert_screen`, `type_string`) into IPC calls or FFI calls to the new Python `isotovideo` backend.
-3. **State Management and Event Loop:**
-   - Implement the main event loop and state machine (running tests, handling timeouts) in Python (using `asyncio` if applicable).
-4. **Validation:** Run the complete existing Perl test suite against the new Python-driven `isotovideo`.
+## Phase 2: Core Image Processing (Rust Core)
+*Objective: Replace the performance-critical `tinycv` C++ logic with Rust.*
 
-## Phase 3: Backends and Consoles Migration
-**Objective:** Port the backend management and console interactions to Python.
+1.  **Rust Core API**:
+    - Implement `match_needle` (SSE-based, ROI/margin support), `copyrect`, `replacerect`, and `scale` in the Rust core.
+2.  **Perl Bridge (Inline::Python)**:
+    - Utilize the existing `Inline::Python` dependency to call into the Rust core (via PyO3). 
+    - *Decision*: Avoid `FFI::Platypus` due to availability constraints in openSUSE.
+3.  **Pure Perl `tinycv`**:
+    - Refactor `ppmclibs/tinycv.pm` to be a pure Perl bridge, removing all XS and C++ interdependencies.
+4.  **Verification**:
+    - Run existing `t/01-test_needle.t` with `OS_AUTOINST_RUST_CORE=1`.
 
-1. **Backend Migration (Python):**
-   - Port `backend::base`, `backend::qemu`, `backend::svirt`, etc., to Python.
-   - Ensure the new Python backends integrate seamlessly with the Python `isotovideo` loop.
-2. **Console Migration (Python/Rust):**
-   - Port console handling (`console::vnc`, `console::serial`, `console::ssh`) to Python.
-   - Utilize the Rust core for high-performance VNC frame handling where necessary.
-3. **Step-by-Step Integration:**
-   - Migrate one backend/console at a time.
-   - Use feature flags or configuration to switch between the legacy Perl implementation and the new Python implementation during testing.
-4. **Validation:** Extensive testing with various backends (QEMU, bare-metal, Hyper-V) to ensure feature parity.
+---
 
-## Phase 4: Extensions, Utilities, and Cleanup
-**Objective:** Migrate remaining components and remove deprecated code.
+## Phase 3: Modern Orchestrator (Python isotovideo)
+*Objective: Port the main execution loop and IPC to Python.*
 
-1. **Extensions Migration:**
-   - Port any remaining Perl extensions or plugins to Python.
-2. **Tooling and Utilities:**
-   - Migrate supplementary scripts (e.g., in `tools/`) to Python.
-3. **Code Deprecation and Removal:**
-   - Once all phases are validated and running in production, systematically remove the old C++ and Perl implementations (excluding the shallow Perl test API).
-   - Clean up the build system (remove CMake, adapt Makefiles to manage Rust/Cargo and Python dependencies).
+1.  **Orchestrator Scaffold**:
+    - Implement `isotovideo.py` with robust absolute path resolution and `PROJECT_ROOT` discovery.
+2.  **Hardened IPC Bridge**:
+    - Implement `JsonRpcStream` to handle stream buffering and message extraction correctly (avoiding brittle line-splitting).
+3.  **Command Dispatcher**:
+    - Implement a clean Registry/Dispatcher pattern for command handling to avoid monolithic `if/elif` blocks.
+4.  **Verification**:
+    - Integration test `t/98-python-isotovideo.t` ensuring IPC reliability.
 
-## Quality Assurance & Testing Strategy
-- **Continuous Integration:** Every PR must pass the full existing test suite. No regression in the Perl test API is permitted.
-- **Coverage:** New Python and Rust code must have high test coverage (>90%).
-- **Linting & Typing:** 
-  - Python: Enforce strict type hints (`mypy`), linting (`ruff`), and formatting (`black`).
-  - Rust: Enforce standard formatting (`rustfmt`) and linting (`clippy`).
-- **Performance Benchmarks:** Establish benchmarks for needle matching and VNC frame processing to ensure the Rust implementation meets or exceeds the legacy C++ performance.
+---
+
+## Phase 4: Backend & Console Protocols (Python)
+*Objective: Port VM management and console communication.*
+
+1.  **QEMU Infrastructure**:
+    - Port `QemuBuilder` (command-line generation) and `QmpClient` (Machine Protocol).
+2.  **VNC Protocol**:
+    - Implement RFB handshake, keysym mapping, and `ikvm` (USB) support in Python.
+3.  **Dynamic Console Registry**:
+    - Restore multi-console support via lazy instantiation in the Python `Runner`.
+4.  **OCR Bridge**:
+    - Migrate Tesseract integration with multilingual support to the Python backend.
+
+---
+
+## Phase 5: Cleanup & Finalization
+*Objective: Remove all legacy debt and verify full system operation.*
+
+1.  **Comprehensive Validation**:
+    - Conduct full test suite validation running entirely on the new stack (`local/no_vars` and full `openQA` scenarios).
+2.  **Dependency Purge**:
+    - Remove `gcc-c++`, `OpenCV`, `fftw`, `cmake`, and `ninja` from `dependencies.yaml`.
+3.  **C++/CMake Deletion**:
+    - Systematically remove all `.cpp`, `.cc`, `.h`, `.xs`, and `CMakeLists.txt` files.
+
+---
+
+## Maintainability & Implementation Principles
+- **Commit Granularity**: Every numbered step must be a single, atomic, and fully verified commit.
+- **Zero Duplication**: Shared logic (e.g., image parsing) must be centralized in the Rust core.
+- **Incremental Switch**: Use the `OS_AUTOINST_RUST_CORE=1` environment variable to allow side-by-side testing of the legacy and new stacks.
+- **Human Readable**: Prioritize functional style and clear naming over procedural complexity.
