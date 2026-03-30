@@ -14,29 +14,7 @@
     - Hook `build-rust` into the `all` target.
 - **Verification**: `make build-rust` succeeds.
 
-## 2. Debugviewer (Python)
-**Goal**: Replace `debugviewer.cpp` with a Python version.
-
-- **Target Files**: `script/debugviewer.py`, `Makefile`.
-- **Implementation**:
-    - Use `tkinter` for the GUI and `Pillow` (PIL) for image handling.
-    - Logic: Loop every 300ms, check if the file exists, load it, and display it.
-    - Bind `<Escape>` to exit.
-- **Makefile Update**: Add symlink `debugviewer/debugviewer -> ../script/debugviewer.py`.
-- **Verification**: Run `debugviewer/debugviewer some_image.png` manually.
-
-## 3. Snd2png (Rust)
-**Goal**: Replace `snd2png.cpp` with a Rust binary.
-
-- **Target Files**: `rust/os-autoinst-core/src/bin/snd2png.rs`, `rust/os-autoinst-core/Cargo.toml`.
-- **Dependencies**: `hound` (WAV parsing), `rustfft` (Spectrogram), `image` (PNG output).
-- **Implementation**:
-    - Replicate the windowing (10ms) and overlap logic from the original C++.
-    - Use `rustfft` for the forward transformation.
-    - Map magnitude to grayscale intensity.
-- **Verification**: `make build-rust` and compare output PNG with legacy `snd2png`.
-
-## 4. Videoencoder (Rust)
+## 2. Videoencoder (Rust)
 **Goal**: Replace `videoencoder.cpp` with a Rust binary.
 
 - **Target Files**: `rust/os-autoinst-core/src/bin/videoencoder.rs`.
@@ -46,3 +24,14 @@
     - Handle `E <len>` (Emit frame) and `R` (Repeat last frame) commands from stdin.
     - Handle `live_log` symlinking to `qemuscreenshot/last.png`.
 - **Verification**: Run a short test and verify `.ogv` presence.
+
+## 2. Snd2png (Rust)
+**Goal**: Replace `snd2png.cpp` with a Rust binary.
+
+- **Target Files**: `rust/os-autoinst-core/src/bin/snd2png.rs`, `rust/os-autoinst-core/Cargo.toml`.
+- **Dependencies**: `hound` (WAV parsing), `rustfft` (Spectrogram), `image` (PNG output).
+- **Implementation**:
+    - Replicate the windowing (10ms) and overlap logic from the original C++.
+    - Use `rustfft` for the forward transformation.
+    - Map magnitude to grayscale intensity.
+- **Verification**: `make build-rust` and compare output PNG with legacy `snd2png`.

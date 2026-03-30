@@ -38,3 +38,14 @@
         - `copyrect`, `replacerect`, `scale`: Return new `tinycv::Image` instances.
         - `xres`, `yres`: Parse PPM header `P6\nWIDTH HEIGHT\n`.
 - **Verification**: `prove t/01-test_needle.t` with `OS_AUTOINST_RUST_CORE=1`.
+
+## 4. Debugviewer (Python)
+**Goal**: Replace `debugviewer.cpp` with a Python version.
+
+- **Target Files**: `script/debugviewer.py`, `Makefile`.
+- **Implementation**:
+    - Use `tkinter` for the GUI and `Pillow` (PIL) for image handling.
+    - Logic: Loop every 300ms, check if the file exists, load it, and display it.
+    - Bind `<Escape>` to exit.
+- **Makefile Update**: Add symlink `debugviewer/debugviewer -> ../script/debugviewer.py`.
+- **Verification**: Run `debugviewer/debugviewer some_image.png` manually.
